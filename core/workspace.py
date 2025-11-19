@@ -1,3 +1,8 @@
+# ==========================================
+# Workspace Manager
+# 사용자별 워크스페이스 관리 및 코드/입력값 저장
+# ==========================================
+
 import os
 import json
 import time
@@ -6,6 +11,12 @@ from pathlib import Path
 from .config import WORKSPACE_DIR
 
 class WorkspaceManager:
+    """
+    사용자별 워크스페이스 관리 클래스
+    - UUID 기반 사용자 격리
+    - 생성된 Python 코드 저장/로드
+    - 블록 설정 입력값 저장/로드
+    """
     
     @staticmethod
     def get_or_create_uid(user_id: str = None) -> tuple[str, Path]:
@@ -16,15 +27,17 @@ class WorkspaceManager:
             user_id = "anonymous"
             created = True
         
-        # 안전한 파일명으로 변환 (특수문자 제거)
-        uid = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)[:50]  # 최대 50자, 안전한 문자만
+        # 사용자 ID를 안전한 파일시스템 이름으로 변환
+        uid = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)[:50]  # 특수문자 제거, 최대 50자 제한
         
-        workspace_path = WORKSPACE_DIR / uid
-        workspace_path.mkdir(parents=True, exist_ok=True)
+        # 사용자별 워크스페이스 디렉토리 생성
+        workspace_path = WORKSPACE_DIR / uid  # /workspace/{uid}/ 경로
+        workspace_path.mkdir(parents=True, exist_ok=True)  # 디렉토리가 없으면 생성
         
+        # 새로운 워크스페이스인 경우 README 파일 생성
         if created:
             readme_path = workspace_path / "README.txt"
-            readme_path.write_text(
+            readme_path.write_text(  # 워크스페이스 정보를 담은 README 파일 생성
                 "AI 블록코딩 워크스페이스\n"
                 f"생성일시: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
                 f"User ID: {uid}\n",

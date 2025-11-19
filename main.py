@@ -1,3 +1,9 @@
+# ==========================================
+# CubeAI - AI 블록코딩 플랫폼 메인 서버
+# FastAPI 기반 RESTful API 서버
+# ==========================================
+
+# 표준 라이브러리
 import os
 import io
 import base64
@@ -7,68 +13,83 @@ import re
 from pathlib import Path
 from typing import Optional
 
+# FastAPI 관련 임포트
 from fastapi import FastAPI, HTTPException, Query, Form, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-import pandas as pd
-import numpy as np
-from PIL import Image
+# 데이터 처리 라이브러리
+import pandas as pd  # CSV 데이터 처리
+import numpy as np   # 배열 연산
+from PIL import Image  # 이미지 처리
 
-from core.config import settings
-from core.workspace import WorkspaceManager
-from core.process import ProcessManager
-from core.dataset import DatasetManager
+# 코어 모듈 임포트
+from core.config import settings  # 설정 관리
+from core.workspace import WorkspaceManager  # 워크스페이스 관리
+from core.process import ProcessManager  # 프로세스 실행 관리
+from core.dataset import DatasetManager  # 데이터셋 관리
 
-from blocks.Preprocessing.start import generate_preprocessing_snippet
-from blocks.ModelDesign.start import generate_modeldesign_snippet
-from blocks.Training.start import generate_training_snippet
-from blocks.Evaluation.start import generate_evaluation_snippet
+# 블록별 코드 생성기 임포트
+from blocks.Preprocessing.start import generate_preprocessing_snippet  # 전처리 코드 생성
+from blocks.ModelDesign.start import generate_modeldesign_snippet  # 모델 설계 코드 생성
+from blocks.Training.start import generate_training_snippet  # 학습 코드 생성
+from blocks.Evaluation.start import generate_evaluation_snippet  # 평가 코드 생성
 
+# ==========================================
+# FastAPI 앱 초기화
+# ==========================================
 app = FastAPI(
     title="CubeAI AI Sever API",
     version="2.0.0"
 )
 
+# CORS 미들웨어 설정 - 크로스 오리진 요청 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=settings.CORS_ORIGINS,  # 허용할 오리진 목록
+    allow_credentials=True,  # 쿠키 포함 요청 허용
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 )
 
+# 스테이지별 코드 생성기 매핑
 code_generators = {
-    "pre": generate_preprocessing_snippet,
-    "model": generate_modeldesign_snippet, 
-    "train": generate_training_snippet,
-    "eval": generate_evaluation_snippet
+    "pre": generate_preprocessing_snippet,  # 전처리
+    "model": generate_modeldesign_snippet,  # 모델 설계
+    "train": generate_training_snippet,  # 학습
+    "eval": generate_evaluation_snippet  # 평가
 }
+
+# ==========================================
+# 라우트 핸들러 정의
+# ==========================================
 
 @app.get("/")
 async def root():
+    """루트 경로 - /app으로 리다이렉트"""
     return RedirectResponse(url="/app")
 
 @app.get("/app")
 async def main_app(user_id: Optional[str] = Query("anonymous")):
-    """메인 애플리케이션 페이지 - 원본에서는 HTML 템플릿 렌더링"""
+    """메인 애플리케이션 페이지 - 워크스페이스 초기화 및 컨텍스트 반환"""
     # FastAPI에서는 HTML 템플릿 대신 JSON으로 데이터 반환
     import re
-    uid = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)[:50]
+    uid = re.sub(r'[^a-zA-Z0-9_-]', '_', user_id)[:50]  # 사용자 ID를 안전한 파일명으로 변환
     
     from core.config import WORKSPACE_DIR
-    workspace_path = WORKSPACE_DIR / uid
-    workspace_path.mkdir(parents=True, exist_ok=True)
+    workspace_path = WORKSPACE_DIR / uid  # 사용자별 워크스페이스 경로 생성
+    workspace_path.mkdir(parents=True, exist_ok=True)  # 디렉토리가 없으면 생성
     
+    # 클라이언트에 전달할 컨텍스트 데이터 준비
     context = {
-        "options": DatasetManager.list_datasets(),
-        "form_state": WorkspaceManager.load_inputs(uid),
-        "current_user_id": user_id,
-        **WorkspaceManager.load_snippets(uid)
+        "options": DatasetManager.list_datasets(),  # 사용 가능한 CSV 파일 목록
+        "form_state": WorkspaceManager.load_inputs(uid),  # 저장된 블록 설정값들
+        "current_user_id": user_id,  # 현재 사용자 ID
+        **WorkspaceManager.load_snippets(uid)  # 생성된 코드 스니펫들 (snippet_pre, snippet_model 등)
     }
     
-    return context
+    return context  # JSON 형태로 반환
 
 @app.get("/app/{user_id}")
 async def main_app_with_user(user_id: str):
@@ -77,56 +98,71 @@ async def main_app_with_user(user_id: str):
 
 @app.post("/convert", response_class=PlainTextResponse)
 async def convert_code(
-    stage: str = Form(...),
-    user_id: Optional[str] = Form(None),
-    **form_data
+    stage: str = Form(...),  # 변환할 스테이지 (pre/model/train/eval/all)
+    user_id: Optional[str] = Form(None),  # 사용자 ID
+    **form_data  # 블록 설정 데이터
 ):
+    """
+    블록 설정을 Python 코드로 변환하는 핵심 API
+    - 각 스테이지별 블록 설정을 받아 실행 가능한 Python 코드 생성
+    - 생성된 코드는 워크스페이스에 저장
+    """
     try:
-        uid, _ = WorkspaceManager.get_or_create_uid(user_id)
+        uid, _ = WorkspaceManager.get_or_create_uid(user_id)  # 사용자 ID 생성 또는 가져오기
         
+        # 익명 사용자는 허용하지 않음
         if uid == "anonymous" and not user_id:
             raise HTTPException(status_code=400, detail="사용자 ID가 필요합니다.")
         
-        print(f"[INFO] /convert 요청: stage={stage}, user_id={uid}")
+        print(f"[INFO] /convert 요청: stage={stage}, user_id={uid}")  # 디버깅용 로그
         
-        form_dict = dict(form_data)
+        # Form 데이터를 딕셔너리로 변환
+        form_dict = dict(form_data)  # **form_data를 일반 딕셔너리로 변환
         if user_id:
-            form_dict["user_id"] = user_id
+            form_dict["user_id"] = user_id  # 사용자 ID를 form 데이터에 추가
         
+        # 모든 스테이지를 한번에 처리하는 경우
         if stage == "all":
-            all_codes = {}
+            all_codes = {}  # 각 스테이지별 생성된 코드를 저장할 딕셔너리
+            # 스테이지별 한글 이름 매핑 (주석용)
             stage_names = {
-                "pre": "전처리 (preprocessing.py)",
-                "model": "모델 설계 (model.py)", 
-                "train": "학습 (training.py)",
-                "eval": "평가 (evaluation.py)"
+                "pre": "전처리 (preprocessing.py)",  # 데이터 로드, 정규화 등
+                "model": "모델 설계 (model.py)",  # CNN 아키텍처 정의
+                "train": "학습 (training.py)",  # 모델 학습 루프
+                "eval": "평가 (evaluation.py)"  # 성능 평가 및 시각화
             }
             
+            # 각 스테이지별로 순차적으로 코드 생성
             for s in ["pre", "model", "train", "eval"]:
-                if s in code_generators:
-                    code = code_generators[s](form_dict)
-                    WorkspaceManager.save_code(uid, s, code)
-                    WorkspaceManager.save_inputs(uid, s, form_dict)
-                    all_codes[s] = code
+                if s in code_generators:  # 해당 스테이지의 코드 생성기가 존재하는지 확인
+                    code = code_generators[s](form_dict)  # 블록 설정을 바탕으로 Python 코드 생성
+                    WorkspaceManager.save_code(uid, s, code)  # 생성된 코드를 파일로 저장
+                    WorkspaceManager.save_inputs(uid, s, form_dict)  # 입력값도 JSON으로 저장 (재사용 위해)
+                    all_codes[s] = code  # 메모리에도 저장 (통합 코드 생성용)
             
-            combined_code = ""
+            # 모든 스테이지의 코드를 하나로 통합
+            combined_code = ""  # 통합된 코드를 저장할 문자열
             for s in ["pre", "model", "train", "eval"]:
-                if s in all_codes:
+                if s in all_codes:  # 해당 스테이지의 코드가 생성되었는지 확인
+                    # 각 스테이지별로 구분선과 함께 코드 추가
                     combined_code += f"# ========== {stage_names[s]} ==========\n\n"
-                    combined_code += all_codes[s]
-                    combined_code += "\n\n"
+                    combined_code += all_codes[s]  # 실제 Python 코드 추가
+                    combined_code += "\n\n"  # 스테이지 간 구분을 위한 빈 줄
             
-            return combined_code
+            return combined_code  # 통합된 전체 코드 반환
             
+        # 단일 스테이지만 처리하는 경우
         else:
+            # 요청된 스테이지가 유효한지 확인
             if stage not in code_generators:
                 raise HTTPException(status_code=400, detail=f"Unknown stage: {stage}")
             
-            code = code_generators[stage](form_dict)
-            WorkspaceManager.save_code(uid, stage, code)
-            WorkspaceManager.save_inputs(uid, stage, form_dict)
+            # 해당 스테이지의 코드 생성기 호출
+            code = code_generators[stage](form_dict)  # 블록 설정 → Python 코드 변환
+            WorkspaceManager.save_code(uid, stage, code)  # 생성된 코드를 파일로 저장
+            WorkspaceManager.save_inputs(uid, stage, form_dict)  # 입력값도 저장
             
-            return code
+            return code  # 생성된 코드 반환
     
     except Exception as e:
         print(f"[ERROR] /convert: {e}")
