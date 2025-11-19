@@ -1,0 +1,47 @@
+# blocks/Training/data_loader.py
+# 데이터 로더 생성
+
+def generate_data_loader_snippet():
+    """
+    DataLoader 생성 함수 스니펫
+    """
+    lines = []
+    lines.append("# 데이터 로드")
+    lines.append("def load_data():")
+    lines.append("    \"\"\"전처리된 데이터 로드\"\"\"")
+    lines.append("    WORKDIR = os.environ.get('AIB_WORKDIR', '.')")
+    lines.append("    data_path = os.path.join(WORKDIR, 'data', 'dataset.pt')")
+    lines.append("    ")
+    lines.append("    if not os.path.exists(data_path):")
+    lines.append("        raise FileNotFoundError(f'Dataset not found at {data_path}. Run preprocessing first.')")
+    lines.append("    ")
+    lines.append("    data = torch.load(data_path, map_location='cpu', weights_only=False)")
+    lines.append("    ")
+    lines.append("    X_train = data['X_train']")
+    lines.append("    y_train = data['y_train']")
+    lines.append("    X_test = data['X_test']")
+    lines.append("    y_test = data['y_test']")
+    lines.append("    ")
+    lines.append("    log(f'Data loaded: train={len(X_train)}, test={len(X_test)}')")
+    lines.append("    ")
+    lines.append("    # DataLoader 생성")
+    lines.append("    train_dataset = TensorDataset(X_train, y_train)")
+    lines.append("    test_dataset = TensorDataset(X_test, y_test)")
+    lines.append("    ")
+    lines.append("    train_loader = DataLoader(")
+    lines.append("        train_dataset,")
+    lines.append("        batch_size=batch_size,")
+    lines.append("        shuffle=True,")
+    lines.append("        num_workers=0")
+    lines.append("    )")
+    lines.append("    ")
+    lines.append("    test_loader = DataLoader(")
+    lines.append("        test_dataset,")
+    lines.append("        batch_size=batch_size,")
+    lines.append("        shuffle=False,")
+    lines.append("        num_workers=0")
+    lines.append("    )")
+    lines.append("    ")
+    lines.append("    return train_loader, test_loader")
+    lines.append("")
+    return "\n".join(lines)

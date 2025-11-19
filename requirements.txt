@@ -1,0 +1,29 @@
+# FastAPI 및 웹 서버
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 머신러닝 라이브러리
+torch==2.1.0
+torchvision==0.16.0
+scikit-learn==1.3.2
+numpy==1.24.3
+pandas==2.0.3
+
+# 시각화 라이브러리 (혼동행렬, 차트 등)
+matplotlib==3.8.2
+seaborn==0.13.2
+
+# 이미지 처리 및 변환
+Pillow==10.0.1
+
+# 진행 표시
+tqdm==4.66.1
+
+
+# 기타 유틸리티
+python-multipart==0.0.6
+
+# 표준 라이브러리 (Python 내장, 설치 불필요)
+# - os, json, time, datetime, re, base64, io
+# - pathlib, typing, dataclasses
+# - zipfile, tempfile, threading, subprocess
